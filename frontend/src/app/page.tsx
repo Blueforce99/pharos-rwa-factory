@@ -1,7 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { WagmiProvider, useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi'
 import { config, pharosAtlantic } from '../config/wagmi' 
 import { DeployForm } from '../components/DeployForm'
 import { AssetList } from '../components/AssetList'
@@ -23,8 +23,8 @@ export default function App() {
 }
 
 function Dashboard() {
-  const { isConnected, address } = useAccount()
-  const chainId = useChainId() 
+  // FIX: Get chainId directly from the account to see the REAL network
+  const { isConnected, address, chainId: connectedChainId } = useAccount()
   const { switchChain, error: switchError } = useSwitchChain() 
   const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
@@ -36,20 +36,22 @@ function Dashboard() {
     setMounted(true)
   }, [])
 
-  // ⚡ AUTO-SWITCH LOGIC (Rabby Optimized)
-  useEffect(() => {
-    if (isConnected && chainId !== pharosAtlantic.id) {
-      // We try to switch. If the chain is missing, Wagmi will auto-try adding it 
-      // because we defined the full chain object in wagmi.ts
-      switchChain({ chainId: pharosAtlantic.id })
-    }
-  }, [isConnected, chainId, switchChain])
+  // LOGIC: Check if the REAL chain ID matches our Target ID
+  const isWrongNetwork = isConnected && connectedChainId !== pharosAtlantic.id;
 
-  // Monitor Switch Errors (e.g. User Rejected)
+  // ⚡ AUTO-SWITCH LOGIC
+  useEffect(() => {
+    if (mounted && isWrongNetwork) {
+      console.log(`Mismatch! Wallet: ${connectedChainId} | App: ${pharosAtlantic.id}`);
+      switchChain({ chainId: pharosAtlantic.id });
+    }
+  }, [mounted, isWrongNetwork, connectedChainId, switchChain]);
+
+  // Handle Switch Errors
   useEffect(() => {
     if(switchError) {
       toast.error("Network Switch Failed", {
-        description: "Please switch to Pharos Atlantic manually in your wallet."
+        description: "Please manually switch to Pharos Atlantic in your wallet."
       })
     }
   }, [switchError])
@@ -57,7 +59,6 @@ function Dashboard() {
   if (!mounted) return null
 
   const glassPanel = "bg-white/10 backdrop-blur-md border border-white/20 shadow-xl"
-  const isWrongNetwork = chainId && chainId !== pharosAtlantic.id;
 
   // 1. NOT CONNECTED
   if (!isConnected) {
@@ -112,7 +113,7 @@ function Dashboard() {
 
           <div className="p-4 border-t border-white/10 space-y-3">
             
-            {/* NETWORK INDICATOR (With Click-to-Fix Fallback) */}
+            {/* NETWORK STATUS INDICATOR */}
             <div 
                 onClick={() => isWrongNetwork && switchChain({ chainId: pharosAtlantic.id })}
                 className={`p-3 rounded-xl flex items-center gap-3 border cursor-pointer transition-all ${isWrongNetwork ? 'bg-red-500/10 border-red-500/50 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/50'}`}
@@ -121,7 +122,7 @@ function Dashboard() {
                 <div className="flex-1 overflow-hidden">
                     <p className="text-xs text-gray-400">Network</p>
                     <p className={`text-sm font-semibold truncate ${isWrongNetwork ? "text-red-400" : "text-green-400"}`}>
-                        {isWrongNetwork ? "Wrong Network (Fix)" : "Pharos Atlantic"}
+                        {isWrongNetwork ? `Wrong Chain (${connectedChainId})` : "Pharos Atlantic"}
                     </p>
                 </div>
             </div>
@@ -141,23 +142,26 @@ function Dashboard() {
        </aside>
 
        <main className="flex-1 p-4 h-screen overflow-y-auto">
-         {/* If Wrong Network, BLOCK the main view to force attention */}
          {isWrongNetwork ? (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
-                <AlertTriangle size={64} className="text-red-400 mb-4 animate-bounce" />
-                <h2 className="text-2xl font-bold">Network Mismatch</h2>
-                <p className="text-gray-400 max-w-md">
-                    Rabby prevented the auto-switch. Please approve the network switch in your wallet.
-                </p>
-                <button 
-                    onClick={() => switchChain({ chainId: pharosAtlantic.id })}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg"
-                >
-                    Switch to Pharos
-                </button>
-            </div>
+             // BLOCKING SCREEN FOR WRONG NETWORK
+             <div className="h-full flex flex-col items-center justify-center space-y-6">
+                <div className="p-6 bg-red-500/10 border border-red-500/50 rounded-2xl text-center max-w-md">
+                    <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-white mb-2">Wrong Network Detected</h2>
+                    <p className="text-gray-400 mb-4">
+                        You are connected to Chain ID <span className="text-white font-mono">{connectedChainId}</span> (Base/Eth).
+                        <br/>We need Pharos Atlantic (<span className="text-white font-mono">{pharosAtlantic.id}</span>).
+                    </p>
+                    <button 
+                        onClick={() => switchChain({ chainId: pharosAtlantic.id })}
+                        className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-all"
+                    >
+                        Switch to Pharos
+                    </button>
+                </div>
+             </div>
          ) : (
-            activeTab === 'dashboard' ? <AssetList /> : <DeployForm onSuccess={() => setActiveTab('dashboard')} />
+             activeTab === 'dashboard' ? <AssetList /> : <DeployForm onSuccess={() => setActiveTab('dashboard')} />
          )}
        </main>
     </div>
