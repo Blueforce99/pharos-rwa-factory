@@ -5,7 +5,7 @@ import AssetFactoryABI from '../abis/AssetFactory.json'
 import { Rocket, Loader2, ExternalLink, CheckCircle } from 'lucide-react'
 
 // ⚠️ REPLACE THIS WITH YOUR LATEST DEPLOYED ADDRESS FROM REMIX
-const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; 
+const FACTORY_ADDRESS = '0x741cDEe12E86d855D89447928746B3B289A048FA'; 
 
 export function DeployForm({ onSuccess }: { onSuccess: () => void }) {
   const { data: hash, writeContract, isPending } = useWriteContract()
