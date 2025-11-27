@@ -1,12 +1,12 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, useAccount, useConnect, useDisconnect } from 'wagmi'
-import { config } from '../config/wagmi'
+import { WagmiProvider, useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { config, pharosAtlantic } from '../config/wagmi' // Ensure this import matches your file
 import { DeployForm } from '../components/DeployForm'
 import { AssetList } from '../components/AssetList'
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck, AlertTriangle } from 'lucide-react'
 
 const queryClient = new QueryClient()
 
@@ -22,30 +22,27 @@ export default function App() {
 
 function Dashboard() {
   const { isConnected, address } = useAccount()
+  const chainId = useChainId() // Get current network
+  const { switchChain } = useSwitchChain() // Hook to force switch
   const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'deploy'>('dashboard')
   
-  // --- HYDRATION FIX START ---
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'deploy'>('dashboard')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Prevent rendering until client-side is ready
   if (!mounted) return null
-  // --- HYDRATION FIX END ---
 
   const glassPanel = "bg-white/10 backdrop-blur-md border border-white/20 shadow-xl"
 
-  // 1. LOGIN SCREEN (Not Connected)
+  // 1. NOT CONNECTED STATE
   if (!isConnected) {
     return (
       <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/30 rounded-full blur-[128px] animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/30 rounded-full blur-[128px] animate-pulse"></div>
-
         <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center ${glassPanel}`}>
           <div className="mb-6 flex justify-center">
             <div className="p-4 bg-blue-500/20 rounded-full">
@@ -65,13 +62,40 @@ function Dashboard() {
     )
   }
 
-  // 2. DASHBOARD (Connected)
+  // 2. WRONG NETWORK STATE (The Fix!)
+  // If connected, but NOT on Pharos Atlantic (ID: 688688)
+  if (chainId !== pharosAtlantic.id) {
+    return (
+      <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
+         <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center border-2 border-yellow-500/50 ${glassPanel}`}>
+          <div className="mb-6 flex justify-center">
+            <div className="p-4 bg-yellow-500/20 rounded-full">
+              <AlertTriangle className="w-12 h-12 text-yellow-400" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Wrong Network</h2>
+          <p className="text-gray-400 mb-6">
+            You are connected to the wrong blockchain. Please switch to Pharos Atlantic to manage your assets.
+          </p>
+          <button 
+            onClick={() => switchChain({ chainId: pharosAtlantic.id })}
+            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-all shadow-lg shadow-yellow-500/25"
+          >
+            Switch to Pharos Testnet
+          </button>
+          <button onClick={() => disconnect()} className="mt-4 text-sm text-gray-500 hover:text-white">
+            Disconnect
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  // 3. CORRECT NETWORK DASHBOARD
   return (
     <div className="min-h-screen bg-[#0f172a] text-white flex relative overflow-hidden">
-       {/* Background Ambience */}
        <div className="absolute top-[-10%] right-[20%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none" />
 
-       {/* Sidebar */}
        <aside className={`w-64 m-4 rounded-2xl flex flex-col ${glassPanel}`}>
           <div className="p-6 border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
@@ -108,7 +132,6 @@ function Dashboard() {
           </div>
        </aside>
 
-       {/* Main Content */}
        <main className="flex-1 p-4 h-screen overflow-y-auto">
          {activeTab === 'dashboard' ? <AssetList /> : <DeployForm onSuccess={() => setActiveTab('dashboard')} />}
        </main>
