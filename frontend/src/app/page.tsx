@@ -6,7 +6,7 @@ import { config, pharosAtlantic } from '../config/wagmi'
 import { DeployForm } from '../components/DeployForm'
 import { AssetList } from '../components/AssetList'
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck, AlertTriangle, Network } from 'lucide-react' // Added Network icon
+import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck } from 'lucide-react'
 import { Toaster } from 'sonner'
 
 const queryClient = new QueryClient()
@@ -24,31 +24,33 @@ export default function App() {
 
 function Dashboard() {
   const { isConnected, address } = useAccount()
-  const chainId = useChainId()
-  const { switchChain } = useSwitchChain()
+  const chainId = useChainId() 
+  const { switchChain } = useSwitchChain() // Hook to switch network
   const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'deploy'>('dashboard')
   const [mounted, setMounted] = useState(false)
 
+  // 1. Hydration Fix
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // 2. AUTO-SWITCH LOGIC
+  // If connected, but on wrong chain, force switch immediately
+  useEffect(() => {
+    if (isConnected && chainId !== pharosAtlantic.id) {
+      console.log("Wrong Network detected. Switching to Pharos Atlantic...")
+      switchChain({ chainId: pharosAtlantic.id })
+    }
+  }, [isConnected, chainId, switchChain])
+
   if (!mounted) return null
 
   const glassPanel = "bg-white/10 backdrop-blur-md border border-white/20 shadow-xl"
-  const isWrongNetwork = chainId && chainId !== pharosAtlantic.id;
 
-  // --- DEBUG BAR (Keep until verified) ---
-  const DebugBar = () => (
-    <div className={`fixed top-0 left-0 text-white text-xs px-2 py-1 z-50 ${isWrongNetwork ? 'bg-red-600' : 'bg-green-600'}`}>
-      DEBUG: ChainID: {chainId} | Target: {pharosAtlantic.id}
-    </div>
-  )
-
-  // 1. NOT CONNECTED
+  // 3. LOGIN SCREEN (Not Connected)
   if (!isConnected) {
     return (
       <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
@@ -72,12 +74,13 @@ function Dashboard() {
     )
   }
 
-  // 2. DASHBOARD (With Manual Network Controls)
+  // 4. MAIN DASHBOARD (Clean & No Debug Bloat)
   return (
     <div className="min-h-screen bg-[#0f172a] text-white flex relative overflow-hidden">
-       <DebugBar />
+       {/* Background Ambience */}
        <div className="absolute top-[-10%] right-[20%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none" />
 
+       {/* Sidebar */}
        <aside className={`w-64 m-4 rounded-2xl flex flex-col ${glassPanel}`}>
           <div className="p-6 border-b border-white/10">
             <h2 className="text-xl font-bold flex items-center gap-2">
@@ -101,27 +104,6 @@ function Dashboard() {
           </nav>
 
           <div className="p-4 border-t border-white/10 space-y-3">
-            {/* NETWORK STATUS BADGE */}
-            <div className={`p-3 rounded-xl flex items-center gap-3 border ${isWrongNetwork ? 'bg-red-500/10 border-red-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
-                <Network size={16} className={isWrongNetwork ? "text-red-400" : "text-green-400"} />
-                <div className="flex-1 overflow-hidden">
-                    <p className="text-xs text-gray-400">Network</p>
-                    <p className={`text-sm font-semibold truncate ${isWrongNetwork ? "text-red-400" : "text-green-400"}`}>
-                        {isWrongNetwork ? "Wrong Chain" : "Pharos Atlantic"}
-                    </p>
-                </div>
-            </div>
-
-            {/* Manual Switch Button (Only shows if wrong network) */}
-            {isWrongNetwork && (
-                <button 
-                    onClick={() => switchChain({ chainId: pharosAtlantic.id })}
-                    className="w-full py-2 bg-red-600 text-white text-xs font-bold rounded-lg animate-pulse hover:bg-red-500"
-                >
-                    Fix Network
-                </button>
-            )}
-
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/20">
               <Wallet size={16} className="text-gray-400"/>
               <span className="text-sm font-mono text-gray-300">{address?.slice(0,6)}...{address?.slice(-4)}</span>
@@ -136,6 +118,7 @@ function Dashboard() {
           </div>
        </aside>
 
+       {/* Main Content Area */}
        <main className="flex-1 p-4 h-screen overflow-y-auto">
          {activeTab === 'dashboard' ? <AssetList /> : <DeployForm onSuccess={() => setActiveTab('dashboard')} />}
        </main>
