@@ -93,7 +93,7 @@ export function AssetList() {
 function AssetRow({ asset }: { asset: any }) {
   const [investorAddress, setInvestorAddress] = useState('')
   const [amount, setAmount] = useState('')
-
+  
   // --- WHITELIST LOGIC ---
   const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending } = useWriteContract()
   
@@ -112,23 +112,26 @@ function AssetRow({ asset }: { asset: any }) {
   // --- TRANSFER LOGIC ---
   const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError } = useWriteContract()
 
-  const { isLoading: isTxConfirming, isSuccess: isTxSuccess, status: txStatus } = useWaitForTransactionReceipt({ 
+  // FIX: We need the full receipt data, not just the status hook
+  const { data: receipt, isLoading: isTxConfirming, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ 
     hash: txHash 
   })
 
-  // Watch Transfer Status (This fixes the "False Success" issue)
+  // Watch Transfer Status (This now correctly checks the receipt's execution status)
   useEffect(() => {
-    if (isTxSuccess) {
-        toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
-        setAmount('');
+    // Check if the receipt has arrived and is valid
+    if (isTxConfirmed && receipt) {
+        if (receipt.status === 'success') {
+            toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
+            setAmount('');
+        } else if (receipt.status === 'reverted') {
+            // FIX: This catches the on-chain Compliance Revert
+            toast.error("Compliance Blocked!", { description: "⛔ TRANSFER BLOCKED: Execution failed on-chain." });
+        }
     }
-    // If status is 'reverted' (compliance blocked), showing error
-    if (txStatus === 'reverted') {
-        toast.error("Transaction Reverted", { description: "Compliance Check Failed on-chain." });
-    }
-  }, [isTxSuccess, txStatus, amount])
+  }, [isTxConfirmed, receipt, amount])
 
-  // Watch Immediate Submission Errors (e.g. User rejects wallet)
+  // Watch Immediate Submission Errors
   useEffect(() => {
     if (txError) {
         const msg = txError.message;
@@ -154,8 +157,9 @@ function AssetRow({ asset }: { asset: any }) {
   const handleTransfer = () => {
     if(!investorAddress || !amount) return toast.warning("Enter address and amount");
     
-    // FIX 2: Use parseEther to convert "2000" to "2000000000000000000000"
+    // FIX: Decimals (parseEther)
     try {
+        // We use parseEther assuming 18 decimals, which is standard for ERC20
         const valueInWei = parseEther(amount); 
         writeTransfer({
           address: asset.tokenAddress,
@@ -169,6 +173,7 @@ function AssetRow({ asset }: { asset: any }) {
   }
 
   const isWlLoading = isWlSubmitPending || isWlConfirming;
+  // Use the submission and confirming flags for the loading state
   const isTxLoading = isTxSubmitPending || isTxConfirming;
 
   return (
