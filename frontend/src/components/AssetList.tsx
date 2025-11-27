@@ -2,14 +2,14 @@
 
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { useState, useEffect } from 'react'
+import { parseEther } from 'viem' // <--- IMPORT THIS FOR DECIMALS
 import AssetFactoryABI from '../abis/AssetFactory.json'
-import RegistryABI from '../abis/AssetFactory.json' // Re-using for partial ABI
 import ERC20ABI from '../abis/ERC20.json'
-import { Users, Coins, Wallet, RefreshCw, CheckCircle, ShieldCheck, Send, Loader2 } from 'lucide-react'
+import { Users, Coins, Wallet, RefreshCw, CheckCircle, ShieldCheck, Send, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
-// ⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0x741cDEe12E86d855D89447928746B3B289A048FA';
+//⚠️ YOUR FACTORY ADDRESS
+const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; // <--- Ensure this is your latest Hardened Address
 
 const REGISTRY_PARTIAL_ABI = [
   {
@@ -28,10 +28,8 @@ export function AssetList() {
     functionName: 'getAssets',
   })
 
-  useEffect(() => {
-    if(assets) console.log("✅ Data Loaded:", assets);
-    if(error) console.error("❌ Fetch Error:", error);
-  }, [assets, error]);
+  // Force refresh on load
+  useEffect(() => { refetch() }, [])
 
   return (
     <div className="space-y-6">
@@ -80,8 +78,7 @@ export function AssetList() {
               ) : (
                 <tr>
                   <td colSpan={4} className="px-6 py-10 text-center text-gray-500">
-                    No assets found on this contract.<br/>
-                    <span className="text-xs text-gray-600">Contract: {FACTORY_ADDRESS}</span>
+                    No assets found on this contract.
                   </td>
                 </tr>
               )}
@@ -96,33 +93,53 @@ export function AssetList() {
 function AssetRow({ asset }: { asset: any }) {
   const [investorAddress, setInvestorAddress] = useState('')
   const [amount, setAmount] = useState('')
+
+  // --- WHITELIST LOGIC ---
+  const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending } = useWriteContract()
   
-  // Whitelist Logic
-  const { writeContract: writeWhitelist, isPending: isWhitelistPending } = useWriteContract({
-    mutation: {
-        onSuccess: () => toast.success("Investor Whitelisted!", { description: "They can now receive tokens." }),
-        onError: (err) => toast.error("Whitelist Failed", { description: err.message.split('\n')[0] })
-    }
+  const { isLoading: isWlConfirming, isSuccess: isWlSuccess } = useWaitForTransactionReceipt({ 
+    hash: wlHash 
   })
 
-  // Transfer Logic
-  const { writeContract: writeTransfer, isPending: isTransferPending } = useWriteContract({
-    mutation: {
-        onSuccess: () => {
-            toast.success("Tokens Sent!", { description: `Successfully sent to ${investorAddress.slice(0,6)}...` });
-            setAmount('');
-        },
-        onError: (err) => {
-            // Check for specific compliance error
-            const msg = err.message;
-            if (msg.includes("Pharos Compliance") || msg.includes("Receiver not verified")) {
-                 toast.error("Compliance Blocked!", { description: "⛔ TRANSFER BLOCKED: User is not whitelisted!" });
-            } else {
-                 toast.error("Transfer Failed", { description: msg.split('\n')[0] });
-            }
+  // Watch Whitelist Status
+  useEffect(() => {
+    if (isWlSuccess) {
+        toast.success("Investor Whitelisted!", { description: "Compliance Check Passed." })
+    }
+  }, [isWlSuccess])
+
+
+  // --- TRANSFER LOGIC ---
+  const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError } = useWriteContract()
+
+  const { isLoading: isTxConfirming, isSuccess: isTxSuccess, status: txStatus } = useWaitForTransactionReceipt({ 
+    hash: txHash 
+  })
+
+  // Watch Transfer Status (This fixes the "False Success" issue)
+  useEffect(() => {
+    if (isTxSuccess) {
+        toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
+        setAmount('');
+    }
+    // If status is 'reverted' (compliance blocked), showing error
+    if (txStatus === 'reverted') {
+        toast.error("Transaction Reverted", { description: "Compliance Check Failed on-chain." });
+    }
+  }, [isTxSuccess, txStatus, amount])
+
+  // Watch Immediate Submission Errors (e.g. User rejects wallet)
+  useEffect(() => {
+    if (txError) {
+        const msg = txError.message;
+        if (msg.includes("Pharos Compliance") || msg.includes("Receiver not verified")) {
+             toast.error("Compliance Blocked!", { description: "⛔ User is not whitelisted!" });
+        } else {
+             toast.error("Submission Failed", { description: "User rejected or simulation failed." });
         }
     }
-  })
+  }, [txError])
+
 
   const handleWhitelist = () => {
     if(!investorAddress) return toast.warning("Enter an address");
@@ -136,13 +153,23 @@ function AssetRow({ asset }: { asset: any }) {
 
   const handleTransfer = () => {
     if(!investorAddress || !amount) return toast.warning("Enter address and amount");
-    writeTransfer({
-      address: asset.tokenAddress,
-      abi: ERC20ABI,
-      functionName: 'transfer',
-      args: [investorAddress, BigInt(amount)], // Note: Assumes 0 decimals for simplicity or raw input
-    })
+    
+    // FIX 2: Use parseEther to convert "2000" to "2000000000000000000000"
+    try {
+        const valueInWei = parseEther(amount); 
+        writeTransfer({
+          address: asset.tokenAddress,
+          abi: ERC20ABI,
+          functionName: 'transfer',
+          args: [investorAddress, valueInWei], 
+        })
+    } catch (e) {
+        toast.error("Invalid Amount", { description: "Please enter a valid number." });
+    }
   }
+
+  const isWlLoading = isWlSubmitPending || isWlConfirming;
+  const isTxLoading = isTxSubmitPending || isTxConfirming;
 
   return (
     <tr className="hover:bg-white/5 transition-colors">
@@ -180,19 +207,19 @@ function AssetRow({ asset }: { asset: any }) {
            <div className="flex gap-2">
                 <button 
                     onClick={handleWhitelist}
-                    disabled={isWhitelistPending}
-                    className="flex-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-green-500/20"
+                    disabled={isWlLoading}
+                    className="flex-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-green-500/20 disabled:opacity-50"
                 >
-                    {isWhitelistPending ? <Loader2 size={12} className="animate-spin"/> : <ShieldCheck size={12}/>}
-                    Whitelist
+                    {isWlLoading ? <Loader2 size={12} className="animate-spin"/> : <ShieldCheck size={12}/>}
+                    {isWlLoading ? 'Processing...' : 'Whitelist'}
                 </button>
                 <button 
                     onClick={handleTransfer}
-                    disabled={isTransferPending}
-                    className="flex-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-blue-500/20"
+                    disabled={isTxLoading}
+                    className="flex-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-blue-500/20 disabled:opacity-50"
                 >
-                    {isTransferPending ? <Loader2 size={12} className="animate-spin"/> : <Send size={12}/>}
-                    Transfer
+                    {isTxLoading ? <Loader2 size={12} className="animate-spin"/> : <Send size={12}/>}
+                    {isTxLoading ? 'Sending...' : 'Transfer'}
                 </button>
            </div>
         </div>
