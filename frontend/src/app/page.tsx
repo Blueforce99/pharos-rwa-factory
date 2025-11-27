@@ -2,11 +2,12 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
-import { config, pharosAtlantic } from '../config/wagmi' // Ensure this import matches your file
+import { config, pharosAtlantic } from '../config/wagmi' 
 import { DeployForm } from '../components/DeployForm'
 import { AssetList } from '../components/AssetList'
 import { useState, useEffect } from 'react'
 import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { Toaster } from 'sonner' // Ensure Toaster is here if you added it, otherwise remove this import
 
 const queryClient = new QueryClient()
 
@@ -15,6 +16,7 @@ export default function App() {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <Dashboard />
+        <Toaster position="bottom-right" theme="dark" richColors />
       </QueryClientProvider>
     </WagmiProvider>
   )
@@ -22,8 +24,8 @@ export default function App() {
 
 function Dashboard() {
   const { isConnected, address } = useAccount()
-  const chainId = useChainId() // Get current network
-  const { switchChain } = useSwitchChain() // Hook to force switch
+  const chainId = useChainId() // <--- GETS CURRENT CHAIN ID
+  const { switchChain } = useSwitchChain()
   const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
   
@@ -38,10 +40,19 @@ function Dashboard() {
 
   const glassPanel = "bg-white/10 backdrop-blur-md border border-white/20 shadow-xl"
 
-  // 1. NOT CONNECTED STATE
+  // --- DEBUGGING OVERLAY (REMOVE LATER) ---
+  // This helps you see exactly what the app sees
+  const DebugBar = () => (
+    <div className="fixed top-0 left-0 bg-red-600 text-white text-xs px-2 py-1 z-50">
+      DEBUG: Connected: {isConnected.toString()} | ChainID: {chainId} | Target: {pharosAtlantic.id}
+    </div>
+  )
+
+  // 1. NOT CONNECTED
   if (!isConnected) {
     return (
       <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
+        <DebugBar />
         <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/30 rounded-full blur-[128px] animate-pulse"></div>
         <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center ${glassPanel}`}>
           <div className="mb-6 flex justify-center">
@@ -62,11 +73,12 @@ function Dashboard() {
     )
   }
 
-  // 2. WRONG NETWORK STATE (The Fix!)
-  // If connected, but NOT on Pharos Atlantic (ID: 688688)
-  if (chainId !== pharosAtlantic.id) {
+  // 2. WRONG NETWORK (The Logic Check)
+  // We check if chainId exists AND if it is different from Pharos
+  if (chainId && chainId !== pharosAtlantic.id) {
     return (
       <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
+         <DebugBar />
          <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center border-2 border-yellow-500/50 ${glassPanel}`}>
           <div className="mb-6 flex justify-center">
             <div className="p-4 bg-yellow-500/20 rounded-full">
@@ -75,7 +87,8 @@ function Dashboard() {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Wrong Network</h2>
           <p className="text-gray-400 mb-6">
-            You are connected to the wrong blockchain. Please switch to Pharos Atlantic to manage your assets.
+            You are on Chain ID: <span className="font-mono text-yellow-300">{chainId}</span>.
+            <br/>We need Chain ID: <span className="font-mono text-green-300">{pharosAtlantic.id}</span>.
           </p>
           <button 
             onClick={() => switchChain({ chainId: pharosAtlantic.id })}
@@ -91,9 +104,11 @@ function Dashboard() {
     )
   }
 
-  // 3. CORRECT NETWORK DASHBOARD
+  // 3. DASHBOARD
   return (
     <div className="min-h-screen bg-[#0f172a] text-white flex relative overflow-hidden">
+       {/* Debug Bar included here too */}
+       <DebugBar />
        <div className="absolute top-[-10%] right-[20%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none" />
 
        <aside className={`w-64 m-4 rounded-2xl flex flex-col ${glassPanel}`}>
