@@ -9,7 +9,7 @@ import { Users, Coins, Wallet, RefreshCw, CheckCircle, ShieldCheck, Send, Loader
 import { toast } from 'sonner'
 
 //⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; // <--- Ensure this is your latest Hardened Address
+const FACTORY_ADDRESS = '0x741cDEe12E86d855D89447928746B3B289A048FA'; // <--- Ensure this is your latest Hardened Address
 
 const REGISTRY_PARTIAL_ABI = [
   {
