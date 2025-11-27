@@ -6,8 +6,8 @@ import { config, pharosAtlantic } from '../config/wagmi'
 import { DeployForm } from '../components/DeployForm'
 import { AssetList } from '../components/AssetList'
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck, AlertTriangle } from 'lucide-react'
-import { Toaster } from 'sonner' // Ensure Toaster is here if you added it, otherwise remove this import
+import { LayoutDashboard, PlusCircle, Wallet, LogOut, ShieldCheck, AlertTriangle, Network } from 'lucide-react' // Added Network icon
+import { Toaster } from 'sonner'
 
 const queryClient = new QueryClient()
 
@@ -24,7 +24,7 @@ export default function App() {
 
 function Dashboard() {
   const { isConnected, address } = useAccount()
-  const chainId = useChainId() // <--- GETS CURRENT CHAIN ID
+  const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
@@ -39,12 +39,12 @@ function Dashboard() {
   if (!mounted) return null
 
   const glassPanel = "bg-white/10 backdrop-blur-md border border-white/20 shadow-xl"
+  const isWrongNetwork = chainId && chainId !== pharosAtlantic.id;
 
-  // --- DEBUGGING OVERLAY (REMOVE LATER) ---
-  // This helps you see exactly what the app sees
+  // --- DEBUG BAR (Keep until verified) ---
   const DebugBar = () => (
-    <div className="fixed top-0 left-0 bg-red-600 text-white text-xs px-2 py-1 z-50">
-      DEBUG: Connected: {isConnected.toString()} | ChainID: {chainId} | Target: {pharosAtlantic.id}
+    <div className={`fixed top-0 left-0 text-white text-xs px-2 py-1 z-50 ${isWrongNetwork ? 'bg-red-600' : 'bg-green-600'}`}>
+      DEBUG: ChainID: {chainId} | Target: {pharosAtlantic.id}
     </div>
   )
 
@@ -52,7 +52,6 @@ function Dashboard() {
   if (!isConnected) {
     return (
       <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
-        <DebugBar />
         <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/30 rounded-full blur-[128px] animate-pulse"></div>
         <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center ${glassPanel}`}>
           <div className="mb-6 flex justify-center">
@@ -73,41 +72,9 @@ function Dashboard() {
     )
   }
 
-  // 2. WRONG NETWORK (The Logic Check)
-  // We check if chainId exists AND if it is different from Pharos
-  if (chainId && chainId !== pharosAtlantic.id) {
-    return (
-      <main className="min-h-screen bg-[#0f172a] flex items-center justify-center relative overflow-hidden">
-         <DebugBar />
-         <div className={`relative z-10 p-10 rounded-2xl max-w-md w-full text-center border-2 border-yellow-500/50 ${glassPanel}`}>
-          <div className="mb-6 flex justify-center">
-            <div className="p-4 bg-yellow-500/20 rounded-full">
-              <AlertTriangle className="w-12 h-12 text-yellow-400" />
-            </div>
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Wrong Network</h2>
-          <p className="text-gray-400 mb-6">
-            You are on Chain ID: <span className="font-mono text-yellow-300">{chainId}</span>.
-            <br/>We need Chain ID: <span className="font-mono text-green-300">{pharosAtlantic.id}</span>.
-          </p>
-          <button 
-            onClick={() => switchChain({ chainId: pharosAtlantic.id })}
-            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-all shadow-lg shadow-yellow-500/25"
-          >
-            Switch to Pharos Testnet
-          </button>
-          <button onClick={() => disconnect()} className="mt-4 text-sm text-gray-500 hover:text-white">
-            Disconnect
-          </button>
-        </div>
-      </main>
-    )
-  }
-
-  // 3. DASHBOARD
+  // 2. DASHBOARD (With Manual Network Controls)
   return (
     <div className="min-h-screen bg-[#0f172a] text-white flex relative overflow-hidden">
-       {/* Debug Bar included here too */}
        <DebugBar />
        <div className="absolute top-[-10%] right-[20%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none" />
 
@@ -133,11 +100,33 @@ function Dashboard() {
             </button>
           </nav>
 
-          <div className="p-4 border-t border-white/10">
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/20 mb-2">
+          <div className="p-4 border-t border-white/10 space-y-3">
+            {/* NETWORK STATUS BADGE */}
+            <div className={`p-3 rounded-xl flex items-center gap-3 border ${isWrongNetwork ? 'bg-red-500/10 border-red-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
+                <Network size={16} className={isWrongNetwork ? "text-red-400" : "text-green-400"} />
+                <div className="flex-1 overflow-hidden">
+                    <p className="text-xs text-gray-400">Network</p>
+                    <p className={`text-sm font-semibold truncate ${isWrongNetwork ? "text-red-400" : "text-green-400"}`}>
+                        {isWrongNetwork ? "Wrong Chain" : "Pharos Atlantic"}
+                    </p>
+                </div>
+            </div>
+
+            {/* Manual Switch Button (Only shows if wrong network) */}
+            {isWrongNetwork && (
+                <button 
+                    onClick={() => switchChain({ chainId: pharosAtlantic.id })}
+                    className="w-full py-2 bg-red-600 text-white text-xs font-bold rounded-lg animate-pulse hover:bg-red-500"
+                >
+                    Fix Network
+                </button>
+            )}
+
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/20">
               <Wallet size={16} className="text-gray-400"/>
               <span className="text-sm font-mono text-gray-300">{address?.slice(0,6)}...{address?.slice(-4)}</span>
             </div>
+            
             <button 
               onClick={() => disconnect()}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
