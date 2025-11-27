@@ -9,7 +9,7 @@ import { Users, Coins, Wallet, RefreshCw, CheckCircle, ShieldCheck, Send, Loader
 import { toast } from 'sonner'
 
 // ⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0x_YOUR_NEW_CONTRACT_ADDRESS_HERE';
+const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629';
 
 const REGISTRY_PARTIAL_ABI = [
   {
