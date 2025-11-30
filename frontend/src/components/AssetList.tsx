@@ -7,7 +7,7 @@ import { Users, Coins, Wallet, RefreshCw, Layers } from 'lucide-react'
 import { AssetDetailsModal } from './AssetDetailsModal';
 
 // ⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; 
+const FACTORY_ADDRESS = '0x741cDEe12E86d855D89447928746B3B289A048FA'; 
 
 // Helper ABI, no longer needed in this file, but kept for context.
 const REGISTRY_PARTIAL_ABI = []

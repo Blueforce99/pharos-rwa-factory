@@ -22,7 +22,7 @@ interface Asset {
     tokenAddress: string;
     registryAddress: string;
     name: string;
-    owner: string; // <-- FIX: ADDED OWNER PROPERTY
+    owner: string; 
 }
 
 interface AssetDetailsModalProps {
@@ -31,7 +31,7 @@ interface AssetDetailsModalProps {
 }
 
 export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
-    const { address: userAddress } = useAccount(); // Get the actual connected address for balance
+    const { address: userAddress } = useAccount();
     const [investorAddress, setInvestorAddress] = useState('');
     const [amount, setAmount] = useState('');
 
@@ -40,27 +40,28 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
         address: asset.tokenAddress as `0x${string}`,
         abi: ERC20ABI,
         functionName: 'balanceOf',
-        // FIX: Use the connected user's address for their balance
         args: [userAddress as `0x${string}`], 
         query: { enabled: !!userAddress }
     });
     
-    // Convert balance from BigInt/Wei to number/token
     const displayBalance = userBalance ? Number(userBalance) / (10 ** 18) : 0;
     
     // --- WHITELIST LOGIC ---
-    const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending } = useWriteContract()
+    // FIX 1: Destructure 'reset' for Whitelist
+    const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending, reset: resetWhitelist } = useWriteContract()
     const { isLoading: isWlConfirming, isSuccess: isWlSuccess } = useWaitForTransactionReceipt({ hash: wlHash })
 
     useEffect(() => {
         if (isWlSuccess) {
             toast.success("Investor Whitelisted!", { description: "Compliance Check Passed." })
+            resetWhitelist(); // FIX: Clear state after successful confirmation
         }
-    }, [isWlSuccess])
+    }, [isWlSuccess, resetWhitelist])
 
 
     // --- TRANSFER LOGIC ---
-    const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError } = useWriteContract()
+    // FIX 2: Destructure 'reset' for Transfer
+    const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError, reset: resetTransfer } = useWriteContract()
     const { data: receipt, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
     useEffect(() => {
@@ -68,12 +69,14 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
             if (receipt.status === 'success') {
                 toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
                 setAmount('');
-                refetchBalance(); // Refetch balance after success
+                refetchBalance(); 
+                resetTransfer(); // FIX: Clear state after successful confirmation
             } else if (receipt.status === 'reverted') {
                 toast.error("Compliance Blocked!", { description: "⛔ TRANSFER BLOCKED: Execution failed on-chain." });
+                resetTransfer(); // FIX: Clear state even if reverted
             }
         }
-    }, [isTxConfirmed, receipt, amount, refetchBalance])
+    }, [isTxConfirmed, receipt, amount, refetchBalance, resetTransfer])
     
     useEffect(() => {
         if (txError) {
@@ -83,8 +86,9 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
              } else {
                  toast.error("Submission Failed", { description: "User rejected or simulation failed." });
              }
+             resetTransfer(); // FIX: Clear state if wallet interaction fails immediately
         }
-    }, [txError])
+    }, [txError, resetTransfer])
 
 
     const handleWhitelist = () => {
@@ -113,7 +117,7 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
     }
     
     const isWlLoading = isWlSubmitPending || isWlConfirming;
-    const isTxLoading = isTxSubmitPending || isTxConfirmed; // Use isTxConfirmed for final loading state
+    const isTxLoading = isTxSubmitPending || isTxConfirming;
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
