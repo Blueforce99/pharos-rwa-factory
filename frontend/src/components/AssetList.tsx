@@ -4,10 +4,10 @@ import { useReadContract, useAccount } from 'wagmi'
 import { useState, useEffect } from 'react'
 import AssetFactoryABI from '../abis/AssetFactory.json'
 import { Users, Coins, Wallet, RefreshCw, Layers } from 'lucide-react'
-import { AssetDetailsModal } from './AssetDetailsModal'; // <--- IMPORT MODAL
+import { AssetDetailsModal } from './AssetDetailsModal';
 
 // ⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; // <--- Ensure this is your latest Hardened Address
+const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; 
 
 // Helper ABI, no longer needed in this file, but kept for context.
 const REGISTRY_PARTIAL_ABI = []
@@ -19,6 +19,9 @@ export function AssetList() {
     functionName: 'getAssets',
   })
   
+  // FIX 1: Call useAccount() once at the top of the component
+  const { address: connectedAddress } = useAccount();
+
   // State for the modal
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
 
@@ -78,7 +81,8 @@ export function AssetList() {
               {Array.isArray(assets) && assets.length > 0 ? (
                 // @ts-ignore
                 assets.map((asset: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedAsset({...asset, owner: useAccount().address})}>
+                    // FIX 2: Use the variable connectedAddress instead of calling the hook inline
+                    <tr key={idx} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedAsset({...asset, owner: connectedAddress})}>
                       <td className="px-6 py-4 font-medium flex items-center gap-2">
                         <Layers size={16} className="text-blue-400" />
                         {asset.name}
@@ -90,7 +94,7 @@ export function AssetList() {
                         {asset.registryAddress.slice(0,6)}...{asset.registryAddress.slice(-4)}
                       </td>
                       <td className="px-6 py-4">
-                          <button onClick={(e) => {e.stopPropagation(); setSelectedAsset({...asset, owner: useAccount().address})}} 
+                          <button onClick={(e) => {e.stopPropagation(); setSelectedAsset({...asset, owner: connectedAddress})}} 
                               className="px-3 py-1 bg-blue-600/30 text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-600/40"
                           >
                             Manage
@@ -115,6 +119,7 @@ export function AssetList() {
 
 
 function StatCard({ title, value, icon, sub }: any) {
+  // StatCard component definition remains the same
   return (
     <div className="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex items-center justify-between">
       <div>
