@@ -1,10 +1,10 @@
 'use client'
 
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi'
 import { useState, useEffect } from 'react'
 import { parseEther } from 'viem'
 import ERC20ABI from '../abis/ERC20.json'
-import { CheckCircle, ShieldCheck, Send, Loader2, Copy, X } from 'lucide-react'
+import { CheckCircle, ShieldCheck, Send, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 // Helper ABI for just the Registry 'register' function
@@ -22,6 +22,7 @@ interface Asset {
     tokenAddress: string;
     registryAddress: string;
     name: string;
+    owner: string; // <-- FIX: ADDED OWNER PROPERTY
 }
 
 interface AssetDetailsModalProps {
@@ -30,6 +31,7 @@ interface AssetDetailsModalProps {
 }
 
 export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
+    const { address: userAddress } = useAccount(); // Get the actual connected address for balance
     const [investorAddress, setInvestorAddress] = useState('');
     const [amount, setAmount] = useState('');
 
@@ -38,7 +40,9 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
         address: asset.tokenAddress as `0x${string}`,
         abi: ERC20ABI,
         functionName: 'balanceOf',
-        args: [asset.owner as `0x${string}`], // Assuming the owner is the connected user for balance display
+        // FIX: Use the connected user's address for their balance
+        args: [userAddress as `0x${string}`], 
+        query: { enabled: !!userAddress }
     });
     
     // Convert balance from BigInt/Wei to number/token
@@ -57,7 +61,7 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
 
     // --- TRANSFER LOGIC ---
     const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError } = useWriteContract()
-    const { data: receipt, isSuccess: isTxConfirmed, status: txStatus } = useWaitForTransactionReceipt({ hash: txHash })
+    const { data: receipt, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
     useEffect(() => {
         if (isTxConfirmed && receipt) {
@@ -109,7 +113,7 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
     }
     
     const isWlLoading = isWlSubmitPending || isWlConfirming;
-    const isTxLoading = isTxSubmitPending || isTxConfirming;
+    const isTxLoading = isTxSubmitPending || isTxConfirmed; // Use isTxConfirmed for final loading state
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -185,13 +189,4 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
             </div>
         </div>
     );
-}
-
-// Helper component provided earlier for structure
-function CopyButton({ text }: { text: string }) {
-    return (
-        <button onClick={() => { navigator.clipboard.writeText(text); toast.success("Copied!"); }} className="text-gray-600 hover:text-white">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-        </button>
-    )
 }
