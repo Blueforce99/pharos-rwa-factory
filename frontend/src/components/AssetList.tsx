@@ -1,38 +1,43 @@
 'use client'
 
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useReadContract, useAccount } from 'wagmi'
 import { useState, useEffect } from 'react'
-import { parseEther } from 'viem' // <--- IMPORT THIS FOR DECIMALS
 import AssetFactoryABI from '../abis/AssetFactory.json'
-import ERC20ABI from '../abis/ERC20.json'
-import { Users, Coins, Wallet, RefreshCw, CheckCircle, ShieldCheck, Send, Loader2, AlertCircle } from 'lucide-react'
-import { toast } from 'sonner'
+import { Users, Coins, Wallet, RefreshCw, Layers } from 'lucide-react'
+import { AssetDetailsModal } from './AssetDetailsModal'; // <--- IMPORT MODAL
 
-//⚠️ YOUR FACTORY ADDRESS
-const FACTORY_ADDRESS = '0x741cDEe12E86d855D89447928746B3B289A048FA'; // <--- Ensure this is your latest Hardened Address
+// ⚠️ YOUR FACTORY ADDRESS
+const FACTORY_ADDRESS = '0xAa190cAAd9a5dB30Db377BD65949cE8c88377629'; // <--- Ensure this is your latest Hardened Address
 
-const REGISTRY_PARTIAL_ABI = [
-  {
-    "inputs": [{"internalType": "address","name": "_user","type": "address"}],
-    "name": "register",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
-]
+// Helper ABI, no longer needed in this file, but kept for context.
+const REGISTRY_PARTIAL_ABI = []
 
 export function AssetList() {
   const { data: assets, refetch, isRefetching, error } = useReadContract({
-    address: FACTORY_ADDRESS,
+    address: FACTORY_ADDRESS as `0x${string}`,
     abi: AssetFactoryABI,
     functionName: 'getAssets',
   })
+  
+  // State for the modal
+  const [selectedAsset, setSelectedAsset] = useState<any>(null);
 
   // Force refresh on load
-  useEffect(() => { refetch() }, [])
+  useEffect(() => { refetch() }, [refetch])
 
   return (
     <div className="space-y-6">
+      {/* --- Asset Detail Modal --- */}
+      {selectedAsset && (
+          <AssetDetailsModal 
+              asset={selectedAsset} 
+              onClose={() => {
+                setSelectedAsset(null);
+                refetch(); // Refresh list after closing modal
+              }}
+          />
+      )}
+
       <header className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold">Asset Overview</h1>
@@ -73,7 +78,25 @@ export function AssetList() {
               {Array.isArray(assets) && assets.length > 0 ? (
                 // @ts-ignore
                 assets.map((asset: any, idx: number) => (
-                    <AssetRow key={idx} asset={asset} />
+                    <tr key={idx} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedAsset({...asset, owner: useAccount().address})}>
+                      <td className="px-6 py-4 font-medium flex items-center gap-2">
+                        <Layers size={16} className="text-blue-400" />
+                        {asset.name}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-mono text-gray-400">
+                        {asset.tokenAddress.slice(0,6)}...{asset.tokenAddress.slice(-4)}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-mono text-gray-400">
+                        {asset.registryAddress.slice(0,6)}...{asset.registryAddress.slice(-4)}
+                      </td>
+                      <td className="px-6 py-4">
+                          <button onClick={(e) => {e.stopPropagation(); setSelectedAsset({...asset, owner: useAccount().address})}} 
+                              className="px-3 py-1 bg-blue-600/30 text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-600/40"
+                          >
+                            Manage
+                          </button>
+                      </td>
+                    </tr>
                 ))
               ) : (
                 <tr>
@@ -90,156 +113,6 @@ export function AssetList() {
   )
 }
 
-function AssetRow({ asset }: { asset: any }) {
-  const [investorAddress, setInvestorAddress] = useState('')
-  const [amount, setAmount] = useState('')
-  
-  // --- WHITELIST LOGIC ---
-  const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending } = useWriteContract()
-  
-  const { isLoading: isWlConfirming, isSuccess: isWlSuccess } = useWaitForTransactionReceipt({ 
-    hash: wlHash 
-  })
-
-  // Watch Whitelist Status
-  useEffect(() => {
-    if (isWlSuccess) {
-        toast.success("Investor Whitelisted!", { description: "Compliance Check Passed." })
-    }
-  }, [isWlSuccess])
-
-
-  // --- TRANSFER LOGIC ---
-  const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError } = useWriteContract()
-
-  // FIX: We need the full receipt data, not just the status hook
-  const { data: receipt, isLoading: isTxConfirming, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ 
-    hash: txHash 
-  })
-
-  // Watch Transfer Status (This now correctly checks the receipt's execution status)
-  useEffect(() => {
-    // Check if the receipt has arrived and is valid
-    if (isTxConfirmed && receipt) {
-        if (receipt.status === 'success') {
-            toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
-            setAmount('');
-        } else if (receipt.status === 'reverted') {
-            // FIX: This catches the on-chain Compliance Revert
-            toast.error("Compliance Blocked!", { description: "⛔ TRANSFER BLOCKED: Execution failed on-chain." });
-        }
-    }
-  }, [isTxConfirmed, receipt, amount])
-
-  // Watch Immediate Submission Errors
-  useEffect(() => {
-    if (txError) {
-        const msg = txError.message;
-        if (msg.includes("Pharos Compliance") || msg.includes("Receiver not verified")) {
-             toast.error("Compliance Blocked!", { description: "⛔ User is not whitelisted!" });
-        } else {
-             toast.error("Submission Failed", { description: "User rejected or simulation failed." });
-        }
-    }
-  }, [txError])
-
-
-  const handleWhitelist = () => {
-    if(!investorAddress) return toast.warning("Enter an address");
-    writeWhitelist({
-      address: asset.registryAddress,
-      abi: REGISTRY_PARTIAL_ABI,
-      functionName: 'register',
-      args: [investorAddress],
-    })
-  }
-
-  const handleTransfer = () => {
-    if(!investorAddress || !amount) return toast.warning("Enter address and amount");
-    
-    // FIX: Decimals (parseEther)
-    try {
-        // We use parseEther assuming 18 decimals, which is standard for ERC20
-        const valueInWei = parseEther(amount); 
-        writeTransfer({
-          address: asset.tokenAddress,
-          abi: ERC20ABI,
-          functionName: 'transfer',
-          args: [investorAddress, valueInWei], 
-        })
-    } catch (e) {
-        toast.error("Invalid Amount", { description: "Please enter a valid number." });
-    }
-  }
-
-  const isWlLoading = isWlSubmitPending || isWlConfirming;
-  // Use the submission and confirming flags for the loading state
-  const isTxLoading = isTxSubmitPending || isTxConfirming;
-
-  return (
-    <tr className="hover:bg-white/5 transition-colors">
-      <td className="px-6 py-4 font-medium">{asset.name}</td>
-      <td className="px-6 py-4 text-sm font-mono text-gray-400">
-        <div className="flex items-center gap-1">
-            {asset.tokenAddress.slice(0,6)}...{asset.tokenAddress.slice(-4)}
-            <CopyButton text={asset.tokenAddress} />
-        </div>
-      </td>
-      <td className="px-6 py-4 text-sm font-mono text-gray-400">
-        {asset.registryAddress.slice(0,6)}...{asset.registryAddress.slice(-4)}
-      </td>
-      <td className="px-6 py-4">
-        <div className="flex flex-col gap-2">
-           {/* Input Row */}
-           <div className="flex gap-2">
-                <input 
-                    type="text" 
-                    placeholder="0x... Investor" 
-                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-1 text-sm focus:outline-none focus:border-blue-500 w-32 text-white"
-                    value={investorAddress}
-                    onChange={(e) => setInvestorAddress(e.target.value)}
-                />
-                <input 
-                    type="number" 
-                    placeholder="Amount" 
-                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-1 text-sm focus:outline-none focus:border-blue-500 w-20 text-white"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                />
-           </div>
-
-           {/* Button Row */}
-           <div className="flex gap-2">
-                <button 
-                    onClick={handleWhitelist}
-                    disabled={isWlLoading}
-                    className="flex-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-green-500/20 disabled:opacity-50"
-                >
-                    {isWlLoading ? <Loader2 size={12} className="animate-spin"/> : <ShieldCheck size={12}/>}
-                    {isWlLoading ? 'Processing...' : 'Whitelist'}
-                </button>
-                <button 
-                    onClick={handleTransfer}
-                    disabled={isTxLoading}
-                    className="flex-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-3 py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1 transition-colors border border-blue-500/20 disabled:opacity-50"
-                >
-                    {isTxLoading ? <Loader2 size={12} className="animate-spin"/> : <Send size={12}/>}
-                    {isTxLoading ? 'Sending...' : 'Transfer'}
-                </button>
-           </div>
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-function CopyButton({ text }: { text: string }) {
-    return (
-        <button onClick={() => { navigator.clipboard.writeText(text); toast.success("Copied!"); }} className="text-gray-600 hover:text-white">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-        </button>
-    )
-}
 
 function StatCard({ title, value, icon, sub }: any) {
   return (
