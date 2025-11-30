@@ -47,22 +47,21 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
     const displayBalance = userBalance ? Number(userBalance) / (10 ** 18) : 0;
     
     // --- WHITELIST LOGIC ---
-    // FIX 1: Destructure 'reset' for Whitelist
     const { data: wlHash, writeContract: writeWhitelist, isPending: isWlSubmitPending, reset: resetWhitelist } = useWriteContract()
     const { isLoading: isWlConfirming, isSuccess: isWlSuccess } = useWaitForTransactionReceipt({ hash: wlHash })
 
     useEffect(() => {
         if (isWlSuccess) {
             toast.success("Investor Whitelisted!", { description: "Compliance Check Passed." })
-            resetWhitelist(); // FIX: Clear state after successful confirmation
+            resetWhitelist();
         }
     }, [isWlSuccess, resetWhitelist])
 
 
     // --- TRANSFER LOGIC ---
-    // FIX 2: Destructure 'reset' for Transfer
     const { data: txHash, writeContract: writeTransfer, isPending: isTxSubmitPending, error: txError, reset: resetTransfer } = useWriteContract()
-    const { data: receipt, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+    // ⚠️ FIX HERE: Added isLoading: isTxConfirming to the destructuring
+    const { data: receipt, isLoading: isTxConfirming, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
     useEffect(() => {
         if (isTxConfirmed && receipt) {
@@ -70,10 +69,10 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
                 toast.success("Transfer Complete!", { description: `Sent ${amount} tokens to investor.` });
                 setAmount('');
                 refetchBalance(); 
-                resetTransfer(); // FIX: Clear state after successful confirmation
+                resetTransfer();
             } else if (receipt.status === 'reverted') {
                 toast.error("Compliance Blocked!", { description: "⛔ TRANSFER BLOCKED: Execution failed on-chain." });
-                resetTransfer(); // FIX: Clear state even if reverted
+                resetTransfer(); 
             }
         }
     }, [isTxConfirmed, receipt, amount, refetchBalance, resetTransfer])
@@ -86,7 +85,7 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
              } else {
                  toast.error("Submission Failed", { description: "User rejected or simulation failed." });
              }
-             resetTransfer(); // FIX: Clear state if wallet interaction fails immediately
+             resetTransfer();
         }
     }, [txError, resetTransfer])
 
@@ -117,7 +116,8 @@ export function AssetDetailsModal({ asset, onClose }: AssetDetailsModalProps) {
     }
     
     const isWlLoading = isWlSubmitPending || isWlConfirming;
-    const isTxLoading = isTxSubmitPending || isTxConfirming;
+    // FIX: isTxConfirming is now defined
+    const isTxLoading = isTxSubmitPending || isTxConfirming; 
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
